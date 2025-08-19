@@ -1,14 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { TouchableOpacity, View, StyleSheet, Dimensions, Animated, TouchableWithoutFeedback, Text, Image } from 'react-native';
+import { 
+  TouchableOpacity, 
+  View, 
+  StyleSheet, 
+  Dimensions, 
+  Animated, 
+  TouchableWithoutFeedback, 
+  Text, 
+  Image 
+} from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
 const PIPE_WIDTH = 60;
-const PIPE_HEIGHT = 500;
+const PIPE_HEIGHT = 500; // не используется напрямую
 const PIPE_SPACING = 250;
 const BIRD_SIZE = 40;
 const GRAVITY = 0.5;
 const JUMP_FORCE = -10;
+
+// Функция для логирования
+const logEvent = (message: string) => {
+  console.log(message);
+};
 
 const FlappyBird = () => {
   const [gameOver, setGameOver] = useState(false);
@@ -18,6 +32,7 @@ const FlappyBird = () => {
   const [pipes, setPipes] = useState<{ id: number; x: number; gapY: number }[]>([]);
   
   const resetGame = () => {
+    logEvent('Game reset');
     setGameOver(false);
     birdPosition.current = height / 2;
     birdAnim.setValue(height / 2);
@@ -25,61 +40,69 @@ const FlappyBird = () => {
   };
   
   useEffect(() => {
+    if (!isGameStarted) return;
+
     // Генерация труб
     const pipeInterval = setInterval(() => {
-      if (!gameOver && isGameStarted) {
-        setPipes(prev => [
-          ...prev,
-          { 
-            id: Date.now(), 
-            x: width, 
-            gapY: Math.floor(Math.random() * (height - 200)) + 100 
-          }
-        ]);
+      if (!gameOver) {
+        const newPipe = { 
+          id: Date.now(), 
+          x: width, 
+          gapY: Math.floor(Math.random() * (height - 300)) + 100 // отступ сверху и снизу
+        };
+        logEvent('New pipe generated: ' + JSON.stringify(newPipe));
+        setPipes(prev => [...prev, newPipe]);
       }
     }, 2000);
     
     // Движение труб
     const moveInterval = setInterval(() => {
       setPipes(prev => {
-        const updated = prev.map(pipe => ({ ...pipe, x: pipe.x - 5 }));
-        return isGameStarted ? updated.filter(pipe => pipe.x > -PIPE_WIDTH) : prev;
+        return prev
+          .map(pipe => ({ ...pipe, x: pipe.x - 5 }))
+          .filter(pipe => pipe.x > -PIPE_WIDTH);
       });
     }, 20);
     
     // Физика птицы
     let velocity = 0;
     const physicsInterval = setInterval(() => {
-      if (!gameOver && isGameStarted) {
-        velocity += GRAVITY;
-        const newPosition = birdPosition.current + velocity;
-        
-        // Проверка на столкновение с землей
-        if (newPosition > height - BIRD_SIZE) {
-          setGameOver(true);
-          return;
-        }
-        
-        // Проверка на столкновение с потолком
-        if (newPosition < 0) {
-          setGameOver(true);
-          return;
-        }
-        
-        // Проверка на столкновение с трубами
-        pipes.forEach(pipe => {
-          if (
-            width / 4 > pipe.x && 
-            width / 4 < pipe.x + PIPE_WIDTH &&
-            (newPosition < pipe.gapY || newPosition > pipe.gapY + 150)
-          ) {
-            setGameOver(true);
-          }
-        });
-        
-        birdPosition.current = newPosition;
-        birdAnim.setValue(newPosition);
+      if (gameOver) return;
+
+      velocity += GRAVITY;
+      const newPosition = birdPosition.current + velocity;
+      
+      // Проверка на столкновение с землей и потолком
+      if (newPosition > height - BIRD_SIZE || newPosition < 0) {
+        logEvent('Collision with ground or ceiling detected');
+        setGameOver(true);
+        return;
       }
+
+      // Проверка столкновений с трубами
+      for (let pipe of pipes) {
+        if (
+          width / 4 + BIRD_SIZE > pipe.x &&
+          width / 4 < pipe.x + PIPE_WIDTH
+        ) {
+          // Птица в пределах X трубы
+          if (
+            newPosition < pipe.gapY || 
+            newPosition + BIRD_SIZE > pipe.gapY + 150
+          ) {
+            logEvent('Collision with pipe detected');
+            setGameOver(true);
+            return;
+          }
+        }
+      }
+      
+      birdPosition.current = newPosition;
+      Animated.timing(birdAnim, {
+        toValue: newPosition,
+        duration: 0, // мгновенно
+        useNativeDriver: false, // важно: top не работает с useNativeDriver: true
+      }).start();
     }, 20);
     
     return () => {
@@ -87,29 +110,42 @@ const FlappyBird = () => {
       clearInterval(moveInterval);
       clearInterval(physicsInterval);
     };
-  }, [gameOver, isGameStarted]);
-  
+  }, [gameOver, isGameStarted, pipes]);
+
   const handleJump = () => {
-    if (gameOver || !isGameStarted) return;
-    birdPosition.current += JUMP_FORCE;
+    if (gameOver) return;
+    
+    if (!isGameStarted) {
+      logEvent('Game started via jump');
+      setIsGameStarted(true);
+      return;
+    }
+
+    logEvent('Bird jump');
+    const newPosition = birdPosition.current + JUMP_FORCE;
+    birdPosition.current = newPosition;
+    
     Animated.timing(birdAnim, {
-      toValue: birdPosition.current,
+      toValue: newPosition,
       duration: 100,
-      useNativeDriver: true,
+      useNativeDriver: false, // для top нужно false
     }).start();
   };
-  
+
   return (
     <TouchableWithoutFeedback onPress={handleJump}>
       <View style={styles.container}>
         {/* Птица */}
-        <Image source={require('@/assets/images/react-logo.png')} style={[
-          styles.bird,
-          { 
-            top: birdAnim,
-            left: width / 4 
-          }
-        ]} />
+        <Animated.Image
+          source={require('@/assets/images/bird.png')}
+          style={[
+            styles.bird,
+            {
+              transform: [{ translateY: birdAnim }],
+              left: width / 4,
+            },
+          ]}
+        />
         
         {/* Трубы */}
         {pipes.map(pipe => (
@@ -121,7 +157,8 @@ const FlappyBird = () => {
                 height: pipe.gapY,
                 width: PIPE_WIDTH,
                 left: pipe.x,
-                top: 0
+                top: 0,
+                backgroundColor: '#73bf2e',
               }
             ]} />
             {/* Нижняя труба */}
@@ -131,18 +168,23 @@ const FlappyBird = () => {
                 height: height - pipe.gapY - 150,
                 width: PIPE_WIDTH,
                 left: pipe.x,
-                bottom: 0
+                bottom: 0,
+                backgroundColor: '#73bf2e',
               }
             ]} />
           </View>
         ))}
         
         {/* Экран окончания игры */}
-        {gameOver && (
-          <View style={styles.overlay}>
+{gameOver && (
+  <View style={styles.overlay}>
             <View style={styles.gameOver}>
               <Text style={styles.gameOverText}>Игра окончена!</Text>
-              <Text style={styles.restartText} onPress={resetGame}>
+              <Text style={styles.restartText} onPress={() => {
+                logEvent('Game restarted');
+                resetGame();
+                setIsGameStarted(false);
+              }}>
                 Нажмите, чтобы начать заново
               </Text>
             </View>
@@ -151,10 +193,22 @@ const FlappyBird = () => {
 
         {!isGameStarted && !gameOver && (
           <View style={styles.overlay}>
-            <TouchableOpacity style={styles.startButton} onPress={() => {
-              setIsGameStarted(true);
-              resetGame();
-            }}>
+            <TouchableOpacity 
+              style={styles.startButton} 
+              onPress={() => {
+                logEvent('Game started');
+                resetGame();
+                // Анимация птицы перед стартом
+                const safeAmplitude = Math.min(10, height / 2 - 10);
+                Animated.sequence([
+                  Animated.timing(birdAnim, { toValue: height / 2 - safeAmplitude, duration: 200, useNativeDriver: false }),
+                  Animated.timing(birdAnim, { toValue: height / 2 + safeAmplitude, duration: 200, useNativeDriver: false }),
+                  Animated.timing(birdAnim, { toValue: height / 2, duration: 200, useNativeDriver: false }),
+                ]).start(() => {
+                  setIsGameStarted(true);
+                });
+              }}
+            >
               <Text style={styles.startText}>Старт</Text>
             </TouchableOpacity>
           </View>
@@ -173,9 +227,9 @@ const styles = StyleSheet.create({
     width: BIRD_SIZE,
     height: BIRD_SIZE,
     position: 'absolute',
+    resizeMode: 'contain',
   },
   pipe: {
-    backgroundColor: '#73bf2e',
     position: 'absolute',
   },
   overlay: {
@@ -198,11 +252,12 @@ const styles = StyleSheet.create({
   restartText: {
     color: '#007AFF',
     fontSize: 18,
+    marginTop: 10,
   },
   startButton: {
     backgroundColor: '#ffcc00',
     padding: 15,
-    borderRadius: 10,
+    borderRadius: 100,
     alignItems: 'center',
     justifyContent: 'center',
     width: 150,
