@@ -9,6 +9,7 @@ import {
  Text,
  Image
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
@@ -23,11 +24,46 @@ const FlappyBird = () => {
  const [gameOver, setGameOver] = useState(false);
  const [isGameStarted, setIsGameStarted] = useState(false);
  const [score, setScore] = useState(0); // Добавляем счетчик очков
+ const [highScore, setHighScore] = useState(0); // Рекорд
  const birdPosition = useRef(height / 2);
  const birdAnim = useRef(new Animated.Value(height / 2)).current;
  const [pipes, setPipes] = useState<{ id: number; x: number; gapY: number }[]>([]);
  const velocity = useRef(0);
  const passedPipes = useRef(new Set<number>()); // Для отслеживания пройденных труб
+
+ // Функция загрузки рекорда
+ const loadHighScore = async () => {
+   try {
+     const storedHighScore = await AsyncStorage.getItem('highScore');
+     if (storedHighScore !== null) {
+       setHighScore(parseInt(storedHighScore, 10));
+     }
+   } catch (error) {
+     console.error('Ошибка загрузки рекорда:', error);
+   }
+ };
+
+ // Функция сохранения рекорда
+ const saveHighScore = async (newScore: number) => {
+   try {
+     await AsyncStorage.setItem('highScore', newScore.toString());
+     setHighScore(newScore);
+   } catch (error) {
+     console.error('Ошибка сохранения рекорда:', error);
+   }
+ };
+
+ // Загружаем рекорд при монтировании компонента
+ useEffect(() => {
+   loadHighScore();
+ }, []);
+
+ // Проверяем и сохраняем рекорд при окончании игры
+ useEffect(() => {
+   if (gameOver && score > highScore) {
+     saveHighScore(score);
+   }
+ }, [gameOver, score, highScore]);
 
  const resetGame = () => {
    setGameOver(false);
@@ -146,9 +182,12 @@ const FlappyBird = () => {
  return (
    <TouchableWithoutFeedback onPress={handleJump}>
      <View style={styles.container}>
-       {/* Отображение очков */}
+       {/* Отображение очков и рекорда */}
        {isGameStarted && (
-         <Text style={styles.scoreText}>Очки: {score}</Text>
+         <View style={styles.scoreContainer}>
+           <Text style={styles.scoreText}>Очки: {score}</Text>
+           <Text style={styles.highScoreText}>Рекорд: {highScore}</Text>
+         </View>
        )}
 
        {/* Птица */}
@@ -287,15 +326,27 @@ const styles = StyleSheet.create({
    color: '#000000',
  },
  scoreText: {
-   position: 'absolute',
-   top: 50,
-   left: width / 2 - 50,
    fontSize: 24,
    fontWeight: 'bold',
    color: 'white',
    textShadowColor: 'black',
    textShadowOffset: { width: 1, height: 1 },
    textShadowRadius: 2,
+ },
+ scoreContainer: {
+   position: 'absolute',
+   top: 50,
+   left: width / 2 - 100,
+   alignItems: 'center',
+ },
+ highScoreText: {
+   fontSize: 18,
+   fontWeight: 'bold',
+   color: 'yellow',
+   textShadowColor: 'black',
+   textShadowOffset: { width: 1, height: 1 },
+   textShadowRadius: 2,
+   marginTop: 5,
  },
 });
 
