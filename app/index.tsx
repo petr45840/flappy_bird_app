@@ -1,28 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  TouchableOpacity, 
-  View, 
-  StyleSheet, 
-  Dimensions, 
-  Animated, 
-  TouchableWithoutFeedback, 
-  Text, 
-  Image 
+import {
+  TouchableOpacity,
+  View,
+  StyleSheet,
+  Dimensions,
+  Animated,
+  TouchableWithoutFeedback,
+  Text,
+  Image
 } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
 const PIPE_WIDTH = 60;
-const PIPE_HEIGHT = 500; // не используется напрямую
 const PIPE_SPACING = 250;
 const BIRD_SIZE = 40;
 const GRAVITY = 0.5;
 const JUMP_FORCE = -10;
-
-// Функция для логирования
-const logEvent = (message: string) => {
-  console.log(message);
-};
+const GAP_HEIGHT = 150; // высота щели между трубами
 
 const FlappyBird = () => {
   const [gameOver, setGameOver] = useState(false);
@@ -30,106 +25,109 @@ const FlappyBird = () => {
   const birdPosition = useRef(height / 2);
   const birdAnim = useRef(new Animated.Value(height / 2)).current;
   const [pipes, setPipes] = useState<{ id: number; x: number; gapY: number }[]>([]);
-  
+  const velocity = useRef(0);
+
   const resetGame = () => {
-    logEvent('Game reset');
     setGameOver(false);
     birdPosition.current = height / 2;
     birdAnim.setValue(height / 2);
+    velocity.current = 0;
     setPipes([]);
   };
-  
+
   useEffect(() => {
     if (!isGameStarted) return;
 
-    // Генерация труб
+    let gameOverRef = gameOver; // Используем ref для текущего состояния
+
+    // Генерация труб каждые 2 сек
     const pipeInterval = setInterval(() => {
-      if (!gameOver) {
-        const newPipe = { 
-          id: Date.now(), 
-          x: width, 
-          gapY: Math.floor(Math.random() * (height - 300)) + 100 // отступ сверху и снизу
+      console.log('Проверка генерации трубы: gameOver =', gameOverRef, 'isGameStarted =', isGameStarted);
+      if (!gameOverRef) {
+        const newPipe = {
+          id: Date.now(),
+          x: width,
+          gapY: Math.floor(Math.random() * (height - 300)) + 100
         };
-        logEvent('New pipe generated: ' + JSON.stringify(newPipe));
-        setPipes(prev => [...prev, newPipe]);
+        console.log('Новая труба создана:', newPipe);
+        setPipes(prev => {
+          const updated = [...prev, newPipe];
+          console.log('Обновленный массив труб после добавления:', updated);
+          return updated;
+        });
       }
     }, 2000);
-    
+
     // Движение труб
     const moveInterval = setInterval(() => {
       setPipes(prev => {
-        return prev
+        const newPipes = prev
           .map(pipe => ({ ...pipe, x: pipe.x - 5 }))
           .filter(pipe => pipe.x > -PIPE_WIDTH);
+        console.log('Трубы после движения:', newPipes);
+        return newPipes;
       });
     }, 20);
-    
-    // Физика птицы
-    let velocity = 0;
-    const physicsInterval = setInterval(() => {
-      if (gameOver) return;
 
-      velocity += GRAVITY;
-      const newPosition = birdPosition.current + velocity;
-      
-      // Проверка на столкновение с землей и потолком
+    // Физика птицы
+    const physicsInterval = setInterval(() => {
+      if (gameOverRef) return;
+
+      velocity.current += GRAVITY;
+      const newPosition = birdPosition.current + velocity.current;
+
+      // Столкновение с землей/потолком
       if (newPosition > height - BIRD_SIZE || newPosition < 0) {
-        logEvent('Collision with ground or ceiling detected');
+        gameOverRef = true;
         setGameOver(true);
         return;
       }
 
-      // Проверка столкновений с трубами
-      for (let pipe of pipes) {
-        if (
-          width / 4 + BIRD_SIZE > pipe.x &&
-          width / 4 < pipe.x + PIPE_WIDTH
-        ) {
-          // Птица в пределах X трубы
+      // Проверка столкновений с трубами - используем текущий state
+      setPipes(currentPipes => {
+        for (let pipe of currentPipes) {
+          const birdX = width / 4;
+          const birdY = newPosition;
+
           if (
-            newPosition < pipe.gapY || 
-            newPosition + BIRD_SIZE > pipe.gapY + 150
+            birdX + BIRD_SIZE > pipe.x && // правая часть птицы пересекает трубу
+            birdX < pipe.x + PIPE_WIDTH   // левая часть ещё в трубе
           ) {
-            logEvent('Collision with pipe detected');
-            setGameOver(true);
-            return;
+            if (
+              birdY < pipe.gapY || // выше щели
+              birdY + BIRD_SIZE > pipe.gapY + GAP_HEIGHT // ниже щели
+            ) {
+              gameOverRef = true;
+              setGameOver(true);
+              return currentPipes;
+            }
           }
         }
-      }
-      
+        return currentPipes;
+      });
+
       birdPosition.current = newPosition;
-      Animated.timing(birdAnim, {
-        toValue: newPosition,
-        duration: 0, // мгновенно
-        useNativeDriver: false, // важно: top не работает с useNativeDriver: true
-      }).start();
+      birdAnim.setValue(newPosition);
     }, 20);
-    
+
     return () => {
       clearInterval(pipeInterval);
       clearInterval(moveInterval);
       clearInterval(physicsInterval);
     };
-  }, [gameOver, isGameStarted, pipes]);
+  }, [isGameStarted]); // Убрали gameOver и pipes из зависимостей
 
   const handleJump = () => {
     if (gameOver) return;
-    
+
     if (!isGameStarted) {
-      logEvent('Game started via jump');
       setIsGameStarted(true);
       return;
     }
 
-    logEvent('Bird jump');
-    const newPosition = birdPosition.current + JUMP_FORCE;
-    birdPosition.current = newPosition;
-    
-    Animated.timing(birdAnim, {
-      toValue: newPosition,
-      duration: 100,
-      useNativeDriver: false, // для top нужно false
-    }).start();
+    velocity.current = JUMP_FORCE; // сбросить скорость вверх
+    birdPosition.current += JUMP_FORCE;
+    birdAnim.setValue(birdPosition.current);
   };
 
   return (
@@ -146,67 +144,64 @@ const FlappyBird = () => {
             },
           ]}
         />
-        
+
         {/* Трубы */}
-        {pipes.map(pipe => (
-          <View key={pipe.id}>
-            {/* Верхняя труба */}
-            <View style={[
-              styles.pipe,
-              {
-                height: pipe.gapY,
-                width: PIPE_WIDTH,
-                left: pipe.x,
-                top: 0,
-                backgroundColor: '#73bf2e',
-              }
-            ]} />
-            {/* Нижняя труба */}
-            <View style={[
-              styles.pipe,
-              {
-                height: height - pipe.gapY - 150,
-                width: PIPE_WIDTH,
-                left: pipe.x,
-                bottom: 0,
-                backgroundColor: '#73bf2e',
-              }
-            ]} />
-          </View>
-        ))}
-        
+        {pipes.map(pipe => {
+          console.log('Рендерим трубу:', pipe);
+          return (
+            <View key={pipe.id}>
+              {/* Верхняя труба */}
+              <View
+                style={[
+                  styles.pipe,
+                  {
+                    height: pipe.gapY,
+                    left: pipe.x,
+                    top: 0,
+                  },
+                ]}
+              />
+              {/* Нижняя труба */}
+              <View
+                style={[
+                  styles.pipe,
+                  {
+                    height: height - pipe.gapY - GAP_HEIGHT,
+                    left: pipe.x,
+                    bottom: 0,
+                  },
+                ]}
+              />
+            </View>
+          );
+        })}
+
         {/* Экран окончания игры */}
-{gameOver && (
-  <View style={styles.overlay}>
+        {gameOver && (
+          <View style={styles.overlay}>
             <View style={styles.gameOver}>
               <Text style={styles.gameOverText}>Игра окончена!</Text>
-              <Text style={styles.restartText} onPress={() => {
-                logEvent('Game restarted');
-                resetGame();
-                setIsGameStarted(false);
-              }}>
+              <Text
+                style={styles.restartText}
+                onPress={() => {
+                  resetGame();
+                  setIsGameStarted(false);
+                }}
+              >
                 Нажмите, чтобы начать заново
               </Text>
             </View>
           </View>
         )}
 
+        {/* Экран старта */}
         {!isGameStarted && !gameOver && (
           <View style={styles.overlay}>
-            <TouchableOpacity 
-              style={styles.startButton} 
+            <TouchableOpacity
+              style={styles.startButton}
               onPress={() => {
-                logEvent('Game started');
                 resetGame();
-                // Анимация птицы перед стартом
-                const safeAmplitude = Math.min(10, height / 2 - 10);
-                Animated.sequence([
-                  Animated.timing(birdAnim, { toValue: height / 2 - safeAmplitude, duration: 200, useNativeDriver: false }),
-                  Animated.timing(birdAnim, { toValue: height / 2 + safeAmplitude, duration: 200, useNativeDriver: false }),
-                  Animated.timing(birdAnim, { toValue: height / 2, duration: 200, useNativeDriver: false }),
-                ]).start(() => {
-                  setIsGameStarted(true);
-                });
+                setIsGameStarted(true);
               }}
             >
               <Text style={styles.startText}>Старт</Text>
@@ -222,6 +217,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#70c5ce',
+    overflow: 'hidden',
   },
   bird: {
     width: BIRD_SIZE,
@@ -231,6 +227,10 @@ const styles = StyleSheet.create({
   },
   pipe: {
     position: 'absolute',
+    backgroundColor: 'darkgreen',
+    borderColor: 'black',
+    borderWidth: 2,
+    width: PIPE_WIDTH,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
