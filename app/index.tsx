@@ -17,22 +17,26 @@ const PIPE_SPACING = 250;
 const BIRD_SIZE = 40;
 const GRAVITY = 0.5;
 const JUMP_FORCE = -10;
-const GAP_HEIGHT = 150; // высота щели между трубами
+const GAP_HEIGHT = 250; // высота щели между трубами (увеличена для облегчения пролета)
 
 const FlappyBird = () => {
   const [gameOver, setGameOver] = useState(false);
   const [isGameStarted, setIsGameStarted] = useState(false);
+  const [score, setScore] = useState(0); // Добавляем счетчик очков
   const birdPosition = useRef(height / 2);
   const birdAnim = useRef(new Animated.Value(height / 2)).current;
   const [pipes, setPipes] = useState<{ id: number; x: number; gapY: number }[]>([]);
   const velocity = useRef(0);
+  const passedPipes = useRef(new Set<number>()); // Для отслеживания пройденных труб
 
   const resetGame = () => {
     setGameOver(false);
+    setScore(0);
     birdPosition.current = height / 2;
     birdAnim.setValue(height / 2);
     velocity.current = 0;
     setPipes([]);
+    passedPipes.current.clear();
   };
 
   useEffect(() => {
@@ -44,10 +48,11 @@ const FlappyBird = () => {
     const pipeInterval = setInterval(() => {
       console.log('Проверка генерации трубы: gameOver =', gameOverRef, 'isGameStarted =', isGameStarted);
       if (!gameOverRef) {
+        const gapY = Math.floor(Math.random() * (height - GAP_HEIGHT - 300)) + 50; // Ограничиваем gapY для лучшей щели
         const newPipe = {
           id: Date.now(),
           x: width,
-          gapY: Math.floor(Math.random() * (height - 300)) + 100
+          gapY: gapY
         };
         console.log('Новая труба создана:', newPipe);
         setPipes(prev => {
@@ -63,7 +68,15 @@ const FlappyBird = () => {
       setPipes(prev => {
         const newPipes = prev
           .map(pipe => ({ ...pipe, x: pipe.x - 5 }))
-          .filter(pipe => pipe.x > -PIPE_WIDTH);
+          .filter(pipe => {
+            if (pipe.x + PIPE_WIDTH < width / 4 && !passedPipes.current.has(pipe.id)) {
+              // Птичка прошла трубу
+              passedPipes.current.add(pipe.id);
+              setScore(prevScore => prevScore + 1);
+              console.log('Птичка прошла трубу, очки:', score + 1);
+            }
+            return pipe.x > -PIPE_WIDTH;
+          });
         console.log('Трубы после движения:', newPipes);
         return newPipes;
       });
@@ -133,6 +146,11 @@ const FlappyBird = () => {
   return (
     <TouchableWithoutFeedback onPress={handleJump}>
       <View style={styles.container}>
+        {/* Отображение очков */}
+        {isGameStarted && (
+          <Text style={styles.scoreText}>Очки: {score}</Text>
+        )}
+
         {/* Птица */}
         <Animated.Image
           source={require('@/assets/images/bird.png')}
@@ -267,6 +285,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#000000',
+  },
+  scoreText: {
+    position: 'absolute',
+    top: 50,
+    left: width / 2 - 50,
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'white',
+    textShadowColor: 'black',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
 });
 
