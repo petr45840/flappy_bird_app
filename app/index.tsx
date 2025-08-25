@@ -27,7 +27,7 @@ const FlappyBird = () => {
  const [highScore, setHighScore] = useState(0); // Рекорд
  const birdPosition = useRef(height / 2);
  const birdAnim = useRef(new Animated.Value(height / 2)).current;
- const [pipes, setPipes] = useState<{ id: number; x: number; gapY: number }[]>([]);
+ const [pipes, setPipes] = useState<{ id: number; x: number; gapY: number; gapHeight: number }[]>([]);
  const velocity = useRef(0);
  const passedPipes = useRef(new Set<number>()); // Для отслеживания пройденных труб
 
@@ -80,24 +80,31 @@ const FlappyBird = () => {
 
    let gameOverRef = gameOver; // Используем ref для текущего состояния
 
-   // Генерация труб каждые 2 сек
-   const pipeInterval = setInterval(() => {
-     console.log('Проверка генерации трубы: gameOver =', gameOverRef, 'isGameStarted =', isGameStarted);
-     if (!gameOverRef) {
-       const gapY = Math.floor(Math.random() * 120) + 30; // gapY от 30 до 150 для гарантированного пространства пролёта
-       const newPipe = {
-         id: Date.now(),
-         x: width,
-         gapY: gapY
-       };
-       console.log('Новая труба создана:', newPipe);
-       setPipes(prev => {
-         const updated = [...prev, newPipe];
-         console.log('Обновленный массив труб после добавления:', updated);
-         return updated;
-       });
-     }
-   }, 2000);
+   // Функция для генерации труб с разнообразием
+   const generatePipe = () => {
+     const gapY = Math.floor(Math.random() * 200) + 100; // gapY от 100 до 300 для большего разнообразия
+     const gapHeight = Math.floor(Math.random() * 100) + 200; // gapHeight от 200 до 300 для переменной щели
+     const newPipe = {
+       id: Date.now(),
+       x: width,
+       gapY: gapY,
+       gapHeight: gapHeight // Добавляем переменную высоту щели
+     };
+     setPipes(prev => [...prev, newPipe]);
+   };
+
+   // Генерация труб с переменным интервалом
+   const scheduleNextPipe = () => {
+     const interval = Math.random() * 1000 + 1500; // Интервал от 1.5 до 2.5 сек
+     setTimeout(() => {
+       if (!gameOverRef) {
+         generatePipe();
+         scheduleNextPipe(); // Рекурсивно планируем следующую
+       }
+     }, interval);
+   };
+
+   scheduleNextPipe(); // Начинаем генерацию
 
    // Движение труб
    const moveInterval = setInterval(() => {
@@ -144,7 +151,7 @@ const FlappyBird = () => {
          ) {
            if (
              birdY < pipe.gapY || // выше щели
-             birdY + BIRD_SIZE > pipe.gapY + GAP_HEIGHT // ниже щели
+             birdY + BIRD_SIZE > pipe.gapY + pipe.gapHeight // ниже щели
            ) {
              gameOverRef = true;
              setGameOver(true);
@@ -160,7 +167,6 @@ const FlappyBird = () => {
    }, 20);
 
    return () => {
-     clearInterval(pipeInterval);
      clearInterval(moveInterval);
      clearInterval(physicsInterval);
    };
@@ -223,9 +229,9 @@ const FlappyBird = () => {
                style={[
                  styles.pipe,
                  {
-                   height: height - pipe.gapY - GAP_HEIGHT,
+                   height: height - pipe.gapY - pipe.gapHeight,
                    left: pipe.x,
-                   top: pipe.gapY + GAP_HEIGHT,
+                   top: pipe.gapY + pipe.gapHeight,
                  },
                ]}
              />
