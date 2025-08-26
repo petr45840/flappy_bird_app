@@ -8,7 +8,8 @@ import {
  TouchableWithoutFeedback,
  Text,
  Image,
- TextInput
+ TextInput,
+ Platform
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -190,6 +191,25 @@ const FlappyBird = () => {
      clearInterval(physicsInterval);
    };
  }, [isGameStarted]); // Убрали gameOver и pipes из зависимостей
+
+ // Обработка клавиши пробел для прыжка (только на web)
+ useEffect(() => {
+   if (!isGameStarted || gameOver) return;
+
+   const handleKeyDown = (event: any) => {
+     if (event.code === 'Space') {
+       event.preventDefault();
+       handleJump();
+     }
+   };
+
+   if (Platform.OS === 'web') {
+     document.addEventListener('keydown', handleKeyDown);
+     return () => {
+       document.removeEventListener('keydown', handleKeyDown);
+     };
+   }
+ }, [isGameStarted, gameOver]);
 
  const handleJump = () => {
    if (gameOver) return;
