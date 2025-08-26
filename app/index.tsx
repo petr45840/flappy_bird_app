@@ -282,14 +282,43 @@ const FlappyBird = () => {
        <View style={styles.overlay}>
          <View style={styles.gameOver}>
            <Text style={styles.gameOverText}>Игра окончена!</Text>
+           <Text style={styles.finalScoreText}>Ваш счет: {score}</Text>
+           <TextInput
+             style={styles.input}
+             placeholder="Введите ваше имя"
+             value={userName}
+             onChangeText={setUserName}
+             maxLength={20}
+           />
+           <TouchableOpacity
+             style={[styles.saveButton, !userName.trim() && { opacity: 0.5 }]}
+             onPress={() => {
+               if (userName.trim()) {
+                 // Сохраняем рекорд
+                 const currentPlayerScore = players[userName] || 0;
+                 if (score > currentPlayerScore) {
+                   const newPlayers = { ...players, [userName]: score };
+                   savePlayers(newPlayers);
+                 }
+                 // Сбрасываем игру
+                 resetGame();
+                 setIsGameStarted(false);
+                 setUserName('');
+               }
+             }}
+             disabled={!userName.trim()}
+           >
+             <Text style={styles.saveButtonText}>Сохранить рекорд</Text>
+           </TouchableOpacity>
            <Text
              style={styles.restartText}
              onPress={() => {
                resetGame();
                setIsGameStarted(false);
+               setUserName('');
              }}
            >
-             Нажмите, чтобы начать заново
+             Начать заново без сохранения
            </Text>
          </View>
        </View>
@@ -300,22 +329,12 @@ const FlappyBird = () => {
        <View style={styles.overlay}>
          <View style={styles.startScreen}>
            <Text style={styles.startTitle}>Flappy Bird</Text>
-           <TextInput
-             style={styles.input}
-             placeholder="Введите ваше имя"
-             value={userName}
-             onChangeText={setUserName}
-             maxLength={20}
-           />
            <TouchableOpacity
-             style={[styles.startButton, !userName && { opacity: 0.5 }]}
+             style={styles.startButton}
              onPress={() => {
-               if (userName.trim()) {
-                 resetGame();
-                 setIsGameStarted(true);
-               }
+               resetGame();
+               setIsGameStarted(true);
              }}
-             disabled={!userName.trim()}
            >
              <Text style={styles.startText}>Старт</Text>
            </TouchableOpacity>
@@ -522,6 +541,25 @@ const styles = StyleSheet.create({
  closeText: {
    color: 'white',
    fontSize: 16,
+ },
+ finalScoreText: {
+   fontSize: 20,
+   fontWeight: 'bold',
+   color: '#333',
+   marginBottom: 15,
+ },
+ saveButton: {
+   backgroundColor: '#4CAF50',
+   padding: 12,
+   borderRadius: 8,
+   alignItems: 'center',
+   marginBottom: 10,
+   minWidth: 200,
+ },
+ saveButtonText: {
+   color: 'white',
+   fontSize: 16,
+   fontWeight: 'bold',
  },
 });
 
